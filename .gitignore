@@ -3,6 +3,9 @@
 *.vscode/
 *.pdf
 *.yaml
+*.pth
+*.pt
+*.tar
 events.out.*
 .ipynb_checkpoints/*
 detection/data

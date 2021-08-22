@@ -12,8 +12,10 @@ from collections import defaultdict, deque
 import datetime
 
 import torch
+import numpy as np
 import torch.distributed as dist
-
+from sklearn.metrics import roc_curve, auc, confusion_matrix
+import matplotlib.pyplot as plt
 
 class SmoothedValue(object):
     """Track a series of values and provide access to smoothed values over a
@@ -249,3 +251,119 @@ def init_distributed_mode(args):
                                          world_size=args.world_size, rank=args.rank)
     torch.distributed.barrier()
     setup_for_distributed(args.rank == 0)
+
+def model_eval(output, target, output_dir, epoch):
+    target = target.cpu().detach().numpy().copy()
+    probablity = torch.nn.functional.softmax(output, dim=1).cpu().detach().numpy().copy()
+    # probablity = probablity[:,1:]
+    score = probablity[:,1:]#np.squeeze(score, 1)
+    pred = np.round(score)
+    pred = np.array(pred, dtype=int)
+    pred = np.squeeze(pred, 1)
+    # _, pred = output.topk(1, 1, True, True)
+    # pred = pred.t()
+    output_dir = output_dir+"txt/"
+    if is_main_process() and not os.path.exists(output_dir):
+        os.makedirs(output_dir, exist_ok=True)  
+    if is_main_process():
+        with open(output_dir + "score.txt","a+") as f:
+            # calculate eer
+            
+            fpr, tpr, threshold = roc_curve(target,score)          
+            fnr = 1-tpr
+            diff = np.absolute(fnr - fpr)
+            idx = np.nanargmin(diff)
+            # print(threshold[idx])
+            eer = np.mean((fpr[idx],fnr[idx]))        
+
+            avg = np.add(fpr, fnr)
+            idx = np.nanargmin(avg)
+            hter = np.mean((fpr[idx],fnr[idx])) 
+
+            fpr_at_10e_m3_idx = np.argmin(np.abs(fpr-10e-3))
+            tpr_cor_10e_m3 = tpr[fpr_at_10e_m3_idx+1]
+
+            fpr_at_5e_m3_idx = np.argmin(np.abs(fpr-5e-3))
+            print(fpr[-1])
+            tpr_cor_5e_m3 = tpr[fpr_at_5e_m3_idx+1]
+
+            fpr_at_10e_m4_idx = np.argmin(np.abs(fpr-10e-4))
+            tpr_cor_10e_m4 = tpr[fpr_at_10e_m4_idx+1]
+
+            actual = list(map(lambda el:[el], target))
+            pred = list(map(lambda el:[el], pred))
+            
+            cm = confusion_matrix(actual, pred)
+            TP = cm[0][0]
+            TN = cm[1][1]
+            FP = cm[1][0]
+            FN = cm[0][1]
+            accuracy = ((TP+TN))/(TP+FN+FP+TN)
+            precision = (TP)/(TP+FP)
+            recall = (TP)/(TP+FN)
+            f_measure = (2*recall*precision)/(recall+precision)
+            sensitivity = TP / (TP + FN)
+            specificity = TN / (TN + FP)		
+            error_rate = 1 - accuracy
+            apcer = FP/(TN+FP)
+            bpcer = FN/(FN+TP)
+            acer = (apcer+bpcer)/2
+            if is_main_process():
+                f.write("="*60)
+                f.write('\nModel %03d \n'%(epoch))
+                f.write('TP:%d, TN:%d,  FP:%d,  FN:%d\n' %(TP,TN,FP,FN))
+                f.write('accuracy:%f\n'%(accuracy))
+                f.write('precision:%f\n'%(precision))
+                f.write('recall:%f\n'%(recall))
+                f.write('f_measure:%f\n'%(f_measure))
+                f.write('sensitivity:%f\n'%(sensitivity))
+                f.write('specificity:%f\n'%(specificity))
+                f.write('error_rate:%f\n'%(error_rate))
+                f.write('apcer:%f\n'%(apcer))
+                f.write('bpcer:%f\n'%(bpcer))
+                f.write('acer:%f\n'%(acer))
+                f.write('eer:%f\n'%(eer))
+                f.write('hter:%f\n'%(hter))
+                f.write('TPR@FPR=10E-3:%f\n'%(tpr_cor_10e_m3))
+                f.write('TPR@FPR=5E-3:%f\n'%(tpr_cor_5e_m3))
+                f.write('TPR@FPR=10E-4:%f\n\n'%(tpr_cor_10e_m4))
+
+def plot_score(args, modelIdx,fpr, tpr, fnr, roc_auc, cross_data = False, log = False):
+    fig = plt.figure()
+    lw = 2
+
+    if not cross_data:
+        if log:
+            plt.xscale("log")
+        elif not log:
+            plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
+        plt.plot(fpr, tpr, color='darkorange', lw=lw, label='ROC curve (area = %0.4f)' % roc_auc)
+        plt.ylabel('True Living Rate')
+    elif cross_data:
+        if log:
+            plt.xscale("log")
+        elif not log:
+            plt.plot([0, 1], [1, 0], color='navy', lw=lw, linestyle='--')#(x0,x1), (y0,y1)
+        plt.plot(fpr, fnr, color='darkorange', lw=lw, label='ROC curve (area = %0.4f)' % roc_auc)
+        plt.ylabel('False Fake Rate')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Living Rate')
+
+    plt.title('Receiver operating characteristic example')
+    plt.legend(loc="lower right")
+    #fig.savefig('/tmp/roc.png')
+    curve_save_path = os.path.join(args.output_dir, "curve")
+
+    if not os.path.exists(curve_save_path):
+        os.makedirs(curve_save_path, exist_ok=True)
+    if log:
+        if cross_data:
+            plt.savefig("%s/ROC_cross_log_%s_%03d.png" %(curve_save_path, args.tstdataset, modelIdx))
+        elif not cross_data:
+            plt.savefig("%s/ROC_log_%s_%03d.png" %(curve_save_path, args.tstdataset, modelIdx))
+    elif not log:
+        if cross_data:
+            plt.savefig("%s/ROC_cross_%s_%03d.png" %(curve_save_path, args.tstdataset, modelIdx))
+        elif not cross_data:
+            plt.savefig("%s/ROC_%s_%03d.png" %(curve_save_path, args.tstdataset, modelIdx))                
