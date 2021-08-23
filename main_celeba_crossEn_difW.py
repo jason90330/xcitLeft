@@ -26,6 +26,7 @@ from dataset.customData import customData
 from datasets import build_transform
 from engine import train_one_epoch, evaluate
 from losses import DistillationLoss
+from loss.focal import FocalLoss
 from samplers import RASampler
 import utils
 
@@ -34,7 +35,7 @@ import xcit
 
 def get_args_parser():
     parser = argparse.ArgumentParser('XCiT training and evaluation script', add_help=False)
-    parser.add_argument('--batch_size', default=100, type=int)
+    parser.add_argument('--batch_size', default=60, type=int)
     parser.add_argument('--epochs', default=20, type=int)
 
     # Model parameters
@@ -161,7 +162,7 @@ def get_args_parser():
                         choices=['kingdom', 'phylum', 'class', 'order', 'supercategory', 'family', 'genus', 'name'],
                         type=str, help='semantic granularity')
 
-    parser.add_argument('--output_dir', default='output/origin_celeba_crossEn_difW_02_08/',
+    parser.add_argument('--output_dir', default='output/origin_celeba_focal_033_066/',
                         help='path where to save, empty for no saving')
     parser.add_argument('--device', default='cuda',
                         help='device to use for training / testing')
@@ -343,7 +344,8 @@ def main(args):
     weight = torch.zeros(2).cuda()
     weight[0]=0.2
     weight[1]=0.8
-    criterion = torch.nn.CrossEntropyLoss(weight=weight)
+    # criterion = torch.nn.CrossEntropyLoss(weight=weight)
+    criterion = FocalLoss()
 
     teacher_model = None
     if args.distillation_type != 'none':
