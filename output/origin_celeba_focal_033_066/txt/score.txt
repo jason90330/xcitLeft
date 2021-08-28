@@ -359,3 +359,22 @@ TPR@FPR=10E-3:0.989523
 TPR@FPR=5E-3:0.981523
 TPR@FPR=10E-4:0.944208
 
+============================================================
+Model 019 
+TP:19890, TN:45674,  FP:1573,  FN:33
+accuracy:0.976091
+precision:0.926711
+recall:0.998344
+f_measure:0.961195
+sensitivity:0.998344
+specificity:0.966707
+error_rate:0.023909
+apcer:0.033293
+bpcer:0.001656
+acer:0.017475
+eer:0.007923
+hter:0.007765
+TPR@FPR=10E-3:0.993714
+TPR@FPR=5E-3:0.987978
+TPR@FPR=10E-4:0.950896
+

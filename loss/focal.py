@@ -6,13 +6,14 @@ class FocalLoss(nn.Module):
         self.gamma = gamma
         self.eps = eps        
         weight = torch.zeros(outNum).cuda()
-        '''wrong(FP=197)
+        #wrong(FP=197)
         weight[0]=0.2
         weight[1]=0.8
         '''
         #better(FP=142)
         weight[0]=0.33
         weight[1]=0.66
+        '''
         
         '''wrong(FP=204)
         weight[0]=0.5
