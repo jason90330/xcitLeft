@@ -30,7 +30,8 @@ from loss.focal import FocalLoss
 from samplers import RASampler
 import utils
 
-import xcit
+# import xcit
+import xcit_res2net_singleNode
 
 
 def get_args_parser():
@@ -162,7 +163,7 @@ def get_args_parser():
                         choices=['kingdom', 'phylum', 'class', 'order', 'supercategory', 'family', 'genus', 'name'],
                         type=str, help='semantic granularity')
 
-    parser.add_argument('--output_dir', default='output/origin_celeba_focal_02_08/',
+    parser.add_argument('--output_dir', default='output/res2net/',
                         help='path where to save, empty for no saving')
     parser.add_argument('--device', default='cuda',
                         help='device to use for training / testing')
@@ -198,7 +199,8 @@ def get_args_parser():
 
 
 def main(args):
-    utils.init_distributed_mode(args)
+    # utils.init_distributed_mode(args)
+    args.distributed = False
 
     print(args)
 
@@ -223,7 +225,7 @@ def main(args):
     # dataset_train, args.nb_classes = build_dataset(is_train=True, args=args)
     # dataset_val, _ = build_dataset(is_train=False, args=args)
     tmp = len(dataset_train)
-    if True:  # args.distributed:
+    if args.distributed:
         num_tasks = utils.get_world_size()
         global_rank = utils.get_rank()
         if args.repeated_aug:
