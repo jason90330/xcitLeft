@@ -16,6 +16,17 @@ from timm.utils import accuracy, ModelEma
 from losses import DistillationLoss
 import utils
 from sklearn.metrics import roc_curve, auc
+import wandb
+
+def train_log(lr, loss, iter, epoch):
+    loss = float(loss)
+
+    # where the magic happens
+    wandb.log({"lr": lr, "epoch": epoch, "loss": loss}, step=iter)
+    print(f"Loss after " + str(iter).zfill(5) + f" iterations: {loss:.3f}")
+
+def eval_log(acc, loss):
+    wandb.log({"accuracy": acc, "loss": loss})
 
 def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
                     data_loader, optimizer: torch.optim.Optimizer,
@@ -31,8 +42,11 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
     metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
     header = 'Epoch: [{}]'.format(epoch)
     print_freq = 10
+    batch_idx=0
 
     for batch in metric_logger.log_every(data_loader, print_freq, header):
+        batch_idx+=1
+        iters = epoch*len(data_loader)+batch_idx
         samples, targets = batch[0], batch[1]
 
         samples = samples.to(device, non_blocking=True)
@@ -65,6 +79,10 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
 
         metric_logger.update(loss=loss_value)
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
+
+        # Report metrics every 25th batch
+        if ((batch_idx + 1) % 25) == 0:
+            train_log(optimizer.param_groups[0]['lr'], loss, iters, epoch)
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger)
@@ -109,10 +127,11 @@ def evaluate(args, data_loader, model, device, epoch):
 
         batch_size = images.shape[0]
         metric_logger.update(loss=loss.item())
-        metric_logger.meters['acc1'].update(acc1[0], n=batch_size)
+        metric_logger.meters['acc1'].update(acc1[0].item(), n=batch_size)
         # metric_logger.meters['acc5'].update(acc5.item(), n=batch_size)
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
+    eval_log(metric_logger.acc1.global_avg, metric_logger.loss.global_avg)
     print('* Acc@1 {top1.global_avg:.3f} loss {losses.global_avg:.3f}'
           .format(top1=metric_logger.acc1, losses=metric_logger.loss))
     print("evaluate")

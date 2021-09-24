@@ -6,6 +6,9 @@
 *.pth
 *.pt
 *.tar
+*.png
+*.jpg
+wandb/
 events.out.*
 .ipynb_checkpoints/*
 detection/data

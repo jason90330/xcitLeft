@@ -169,12 +169,12 @@ class ConvPatchEmbed(nn.Module):
 
         if patch_size[0] == 16:
             self.proj = torch.nn.Sequential(
-                # conv3x3(3, embed_dim // 8, 2), #3 -> 48
-                # nn.GELU(),
-                # conv3x3(embed_dim // 8, embed_dim // 4, 2), #48 -> 96
-                # nn.GELU(),
-                # conv3x3(embed_dim // 4, embed_dim // 2, 2), #96 -> 192
-                # nn.GELU(),
+                conv3x3(3, embed_dim // 8, 2), #3 -> 48
+                nn.GELU(),
+                conv3x3(embed_dim // 8, embed_dim // 4, 2), #48 -> 96
+                nn.GELU(),
+                conv3x3(embed_dim // 4, embed_dim // 2, 2), #96 -> 192
+                nn.GELU(),
                 # conv3x3(embed_dim // 2, embed_dim, 2), #192 -> 384
                 Bottle2neck(3, embed_dim) #192 -> 384(4*96)
             )

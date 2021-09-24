@@ -29,15 +29,15 @@ from losses import DistillationLoss
 from loss.focal import FocalLoss
 from samplers import RASampler
 import utils
+import wandb
 
 # import xcit
-import xcit_lpi_res2net_singleNode
-import wandb
+import xcit_res2net_all_singleNode
 
 def get_args_parser():
     parser = argparse.ArgumentParser('XCiT training and evaluation script', add_help=False)
     parser.add_argument('--batch_size', default=60, type=int)
-    parser.add_argument('--epochs', default=100, type=int)
+    parser.add_argument('--epochs', default=20, type=int)
 
     # Model parameters
     parser.add_argument('--model', default='xcit_small_12_p16', type=str, metavar='MODEL',
@@ -163,7 +163,7 @@ def get_args_parser():
                         choices=['kingdom', 'phylum', 'class', 'order', 'supercategory', 'family', 'genus', 'name'],
                         type=str, help='semantic granularity')
 
-    parser.add_argument('--output_dir', default='output/lpi_res2net/',
+    parser.add_argument('--output_dir', default='output/res2net_all/',
                         help='path where to save, empty for no saving')
     parser.add_argument('--device', default='cuda',
                         help='device to use for training / testing')
@@ -189,8 +189,7 @@ def get_args_parser():
 
     parser.add_argument('--full_crop', action='store_true', help='use crop_ratio=1.0 instead of the\
                                                                   default 0.875 (Used by CaiT).')
-    # parser.add_argument("--pretrained", default='pretrained_model/xcit_small_12_p16_224_dist.pth', type=str, help='Path to pre-trained checkpoint')
-    parser.add_argument("--pretrained", default='', type=str, help='Path to pre-trained checkpoint')
+    parser.add_argument("--pretrained", default='pretrained_model/xcit_small_12_p16_224_dist.pth', type=str, help='Path to pre-trained checkpoint')
     parser.add_argument('--surgery', default=None, type=str, help='Path to checkpoint to copy the \
                                                                    patch projection from. \
                                                                    Can improve stability for very \
@@ -201,8 +200,7 @@ def get_args_parser():
 
 def main(args):
     wandb.login()
-    project_name = args.output_dir.split("/")[1]
-    wandb.init(project=project_name, config = args)
+    wandb.init(config = args)
     # utils.init_distributed_mode(args)
     args.distributed = False
 
@@ -302,7 +300,7 @@ def main(args):
                 print(f"Removing key {k} from pretrained checkpoint")
                 del checkpoint_model[k]
 
-        model.load_state_dict(checkpoint_model, strict=True)
+        model.load_state_dict(checkpoint_model, strict=False)
 
     model.to(device)
 
@@ -477,5 +475,4 @@ if __name__ == '__main__':
     args = parser.parse_args()
     if args.output_dir:
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)
-
     main(args)

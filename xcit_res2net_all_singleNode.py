@@ -86,8 +86,8 @@ class Bottle2neck(nn.Module):
 
         reduction_ratio = 8
         # width = int(math.floor(planes * (baseWidth/64.0)))
-        width = int(math.floor(planes/reduction_ratio/scale))
-        self.conv1 = nn.Conv2d(inplanes, int(planes/reduction_ratio), kernel_size=1, bias=False) # in ch:64, out ch:104, kernel: 1*1
+        width = int(math.floor(planes/reduction_ratio/scale)) # 12
+        self.conv1 = nn.Conv2d(inplanes, int(planes/reduction_ratio), kernel_size=1, bias=False) # in ch:3, out ch:384/8=48, kernel: 1*1
         self.bn1 = nn.BatchNorm2d(int(planes/reduction_ratio))
         self.dropout = nn.Dropout(0.25)
         
@@ -105,12 +105,12 @@ class Bottle2neck(nn.Module):
         self.convs = nn.ModuleList(convs) # in ch:26, out ch:26, kernel: 3*3
         self.bns = nn.ModuleList(bns)
 
-        self.conv3 = nn.Conv2d(width*scale, planes, kernel_size=1, stride=2, bias=False)
+        self.conv3 = nn.Conv2d(width*scale, planes, kernel_size=1, stride=2, bias=False) # in ch:12*4, out ch:384, kernel: 1*1, size/2
         self.bn3 = nn.BatchNorm2d(planes)
 
         # self.relu = nn.ReLU(inplace=True)
         self.gelu = nn.GELU()
-        # self.downsample = downsample # in ch:64, out ch:256
+        # self.downsample = downsample # in ch:3, out ch:384
         self.downsample = nn.Sequential(
                 nn.Conv2d(inplanes, planes, kernel_size=1, stride=2, bias=False),
                 nn.BatchNorm2d(planes),
@@ -122,12 +122,12 @@ class Bottle2neck(nn.Module):
     def forward(self, x):
         residual = x
 
-        out = self.conv1(x) # 60*192*28*28 -> 1*624*28*28 (624=156*4)
+        out = self.conv1(x) # 60*3*224*224 -> 1*48*224*224 (48=12*4)
         out = self.bn1(out) 
         out = self.gelu(out)
         out = self.dropout(out)
 
-        spx = torch.split(out, self.width, 1) # 60*156*28*28
+        spx = torch.split(out, self.width, 1) # 60*12*28*28
         for i in range(self.nums):
           if i==0 or self.stype=='stage':
             sp = spx[i] # X0
@@ -135,20 +135,21 @@ class Bottle2neck(nn.Module):
             sp = sp + spx[i] # X1, X2. sp 是左邊傳來的(上一個 scale)
           sp = self.convs[i](sp)
           sp = self.gelu(self.bns[i](sp))
+          sp = self.dropout(sp)
           if i==0:
             out = sp # 60*156*28*28
           else:
             out = torch.cat((out, sp), 1)
         if self.scale != 1 and self.stype=='normal':
-          out = torch.cat((out, spx[self.nums]),1)# 60*624*28*28
+          out = torch.cat((out, spx[self.nums]),1)# 60*48*28*28
         elif self.scale != 1 and self.stype=='stage':
           out = torch.cat((out, self.pool(spx[self.nums])),1) 
 
-        out = self.conv3(out) # 60*1536*14*14 (1536=192*4*2)
+        out = self.conv3(out) # 60*48*28*28 -> 60*384*14*14
         out = self.bn3(out)
 
         if self.downsample is not None:
-            residual = self.downsample(x) #60*1536*28*28
+            residual = self.downsample(x) #60*384*14*14
 
         out += residual
         out = self.gelu(out)
@@ -173,14 +174,16 @@ class ConvPatchEmbed(nn.Module):
 
         if patch_size[0] == 16:
             self.proj = torch.nn.Sequential(
-                conv3x3(3, embed_dim // 8, 2), #3 -> 48
-                # Bottle2neck(3, embed_dim // 8), #192 -> 384(4*96)
-                nn.GELU(),
-                conv3x3(embed_dim // 8, embed_dim // 4, 2), #48 -> 96
-                nn.GELU(),
-                conv3x3(embed_dim // 4, embed_dim // 2, 2), #96 -> 192
-                nn.GELU(),
+                # conv3x3(3, embed_dim // 8, 2), #3 -> 48
+                # nn.GELU(),
+                # conv3x3(embed_dim // 8, embed_dim // 4, 2), #48 -> 96
+                # nn.GELU(),
+                # conv3x3(embed_dim // 4, embed_dim // 2, 2), #96 -> 192
+                # nn.GELU(),
                 # conv3x3(embed_dim // 2, embed_dim, 2), #192 -> 384
+                Bottle2neck(3, embed_dim // 8),
+                Bottle2neck(embed_dim // 8, embed_dim // 4),
+                Bottle2neck(embed_dim // 4, embed_dim // 2),
                 Bottle2neck(embed_dim // 2, embed_dim) #192 -> 384(4*96)
             )
         elif patch_size[0] == 8:

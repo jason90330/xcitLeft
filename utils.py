@@ -16,6 +16,7 @@ import numpy as np
 import torch.distributed as dist
 from sklearn.metrics import roc_curve, auc, confusion_matrix
 import matplotlib.pyplot as plt
+import wandb
 
 class SmoothedValue(object):
     """Track a series of values and provide access to smoothed values over a
@@ -327,6 +328,8 @@ def model_eval(output, target, output_dir, epoch):
                 f.write('TPR@FPR=10E-3:%f\n'%(tpr_cor_10e_m3))
                 f.write('TPR@FPR=5E-3:%f\n'%(tpr_cor_5e_m3))
                 f.write('TPR@FPR=10E-4:%f\n\n'%(tpr_cor_10e_m4))
+                wandb.log({"apcer": apcer, "bpcer": bpcer, "acer": acer, "eer": eer, "hter": hter
+                        , "TPR@FPR=10E-3": tpr_cor_10e_m3, "TPR@FPR=5E-3": tpr_cor_5e_m3, "TPR@FPR=10E-4": tpr_cor_10e_m4})
 
 def plot_score(args, modelIdx,fpr, tpr, fnr, roc_auc, cross_data = False, log = False):
     fig = plt.figure()

@@ -105,14 +105,14 @@ class Bottle2neck(nn.Module):
         self.convs = nn.ModuleList(convs) # in ch:26, out ch:26, kernel: 3*3
         self.bns = nn.ModuleList(bns)
 
-        self.conv3 = nn.Conv2d(width*scale, planes, kernel_size=1, stride=2, bias=False)
+        self.conv3 = nn.Conv2d(width*scale, planes, kernel_size=1, stride=1, bias=False)
         self.bn3 = nn.BatchNorm2d(planes)
 
         # self.relu = nn.ReLU(inplace=True)
         self.gelu = nn.GELU()
         # self.downsample = downsample # in ch:64, out ch:256
         self.downsample = nn.Sequential(
-                nn.Conv2d(inplanes, planes, kernel_size=1, stride=2, bias=False),
+                nn.Conv2d(inplanes, planes, kernel_size=1, stride=1, bias=False),
                 nn.BatchNorm2d(planes),
             )
         self.stype = stype
@@ -180,8 +180,8 @@ class ConvPatchEmbed(nn.Module):
                 nn.GELU(),
                 conv3x3(embed_dim // 4, embed_dim // 2, 2), #96 -> 192
                 nn.GELU(),
-                # conv3x3(embed_dim // 2, embed_dim, 2), #192 -> 384
-                Bottle2neck(embed_dim // 2, embed_dim) #192 -> 384(4*96)
+                conv3x3(embed_dim // 2, embed_dim, 2), #192 -> 384
+                # Bottle2neck(embed_dim // 2, embed_dim) #192 -> 384(4*96)
             )
         elif patch_size[0] == 8:
             self.proj = torch.nn.Sequential(
@@ -218,21 +218,25 @@ class LPI(nn.Module):
 
         padding = kernel_size // 2
 
-        self.conv1 = torch.nn.Conv2d(in_features, out_features, kernel_size=kernel_size,
-                                     padding=padding, groups=out_features)
+        # self.conv1 = torch.nn.Conv2d(in_features, out_features, kernel_size=kernel_size,
+        #                              padding=padding, groups=out_features)
+        self.bottle2neck1 = Bottle2neck(in_features, out_features)
         self.act = act_layer()
         # self.bn = nn.SyncBatchNorm(in_features)
         self.bn = nn.BatchNorm2d(in_features)
-        self.conv2 = torch.nn.Conv2d(in_features, out_features, kernel_size=kernel_size,
-                                     padding=padding, groups=out_features)
+        # self.conv2 = torch.nn.Conv2d(in_features, out_features, kernel_size=kernel_size,
+        #                              padding=padding, groups=out_features)
+        self.bottle2neck2 = Bottle2neck(in_features, out_features)
 
     def forward(self, x, H, W):
         B, N, C = x.shape
         x = x.permute(0, 2, 1).reshape(B, C, H, W)
-        x = self.conv1(x)
+        # x = self.conv1(x) #60*384*14*14 -> 60*384*14*14
+        x = self.bottle2neck1(x)
         x = self.act(x)
         x = self.bn(x)
-        x = self.conv2(x)
+        # x = self.conv2(x) #60*384*14*14 -> 60*384*14*14
+        x = self.bottle2neck2(x)
         x = x.reshape(B, C, N).permute(0, 2, 1)
 
         return x
